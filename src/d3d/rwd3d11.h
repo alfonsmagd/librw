@@ -115,6 +115,8 @@ bool32 setPixelShader(void *shader);
 void clearPixelShader(void *shader);
 void setTexture(uint32 stage, Texture *texture);
 void applyDrawState(void);
+bool32 renderPass(Raster **srvRasters, uint32 numSRVs,
+	Raster **rtvRasters, uint32 numRTVs);
 int32 lightingCB_Shader(Atomic *atomic);
 bool32 uploadDefaultMatrices(Matrix *world);
 bool32 uploadDefaultMaterial(const RGBA &color,

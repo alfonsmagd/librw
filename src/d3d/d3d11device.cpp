@@ -1901,6 +1901,83 @@ done:
 			}
 		}
 
+		bool32
+			renderPass( Raster** srvRasters, uint32 numSRVs,
+						Raster** rtvRasters, uint32 numRTVs )
+		{
+			if( d3d11Globals.context == nil ||
+				numSRVs > D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT ||
+				numRTVs > D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT ||
+				(numSRVs && srvRasters == nil) ||
+				(numRTVs && rtvRasters == nil) )
+				return 0;
+
+			ID3D11ShaderResourceView* srvViews[
+				D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT ] = {};
+			ID3D11RenderTargetView* rtvViews[
+				D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT ] = {};
+			Raster* srvRoots[
+				D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT ] = {};
+			Raster* rtvRoots[
+				D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT ] = {};
+
+			for( uint32 i = 0; i < numSRVs; i++ )
+			{
+				Raster* raster = srvRasters[ i ];
+				if( raster == nil )
+					continue;
+				raster = raster->parent ? raster->parent : raster;
+				if( raster->platform != PLATFORM_D3D11 )
+					return 0;
+				D3dRaster* natras = GETD3DRASTEREXT( raster );
+				if( natras->srv == nil )
+					return 0;
+				srvRoots[ i ] = raster;
+				srvViews[ i ] = ( ID3D11ShaderResourceView* )natras->srv;
+			}
+
+			for( uint32 i = 0; i < numRTVs; i++ )
+			{
+				Raster* raster = rtvRasters[ i ];
+				if( raster == nil )
+					continue;
+				raster = raster->parent ? raster->parent : raster;
+				if( raster->platform != PLATFORM_D3D11 )
+					return 0;
+				rtvRoots[ i ] = raster;
+				if( raster->type == Raster::CAMERA )
+				{
+					ensureSwapChainSize();
+					rtvViews[ i ] = d3d11Globals.defaultRenderTarget;
+				}
+				else
+				{
+					D3dRaster* natras = GETD3DRASTEREXT( raster );
+					if( natras->rtv == nil )
+						return 0;
+					rtvViews[ i ] = ( ID3D11RenderTargetView* )natras->rtv;
+				}
+				if( rtvViews[ i ] == nil )
+					return 0;
+			}
+
+			for( uint32 i = 0; i < numSRVs; i++ )
+				for( uint32 j = 0; j < numRTVs; j++ )
+					if( srvRoots[ i ] && srvRoots[ i ] == rtvRoots[ j ] )
+						return 0;
+
+			ID3D11ShaderResourceView* nullSRVs[
+				D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT ] = {};
+			d3d11Globals.context->PSSetShaderResources(
+				0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullSRVs );
+			d3d11Globals.context->OMSetRenderTargets(
+				numRTVs, numRTVs ? rtvViews : nil, nil );
+			if( numSRVs )
+				d3d11Globals.context->PSSetShaderResources(
+					0, numSRVs, srvViews );
+			return 1;
+		}
+
 		static void
 			setRenderSurfaces( Camera* cam )
 		{
@@ -1908,9 +1985,10 @@ done:
 			ID3D11DepthStencilView* dsv;
 			getRenderSurfaces( cam, &rtv, &dsv );
 
-			ID3D11ShaderResourceView* nullSRVs[ MAXNUMSTAGES ] = {};
+			ID3D11ShaderResourceView* nullSRVs[
+				D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT ] = {};
 			d3d11Globals.context->PSSetShaderResources(
-				0, MAXNUMSTAGES, nullSRVs );
+				0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullSRVs );
 			d3d11Globals.context->OMSetRenderTargets( 1, &rtv, dsv );
 		}
 
